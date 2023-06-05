@@ -8,7 +8,8 @@ import faiss
 from random import shuffle
 import scipy.io.wavfile as wavfile
 from mega import Mega
-from pyngrok import ngrok
+import juuxn_utils
+
 now_dir = os.getcwd()
 sys.path.append(now_dir)
 tmp = os.path.join(now_dir, "TEMP")
@@ -88,6 +89,8 @@ from config import (
     noparallel,
     noautoopen,
 )
+# Create an instance of the Config class
+
 from infer_uvr5 import _audio_pre_
 from my_utils import load_audio
 from train.process_ckpt import show_info, change_info, merge, extract_small_model
@@ -300,6 +303,7 @@ def get_vc(sid):
         net_g = net_g.half()
     else:
         net_g = net_g.float()
+    print(tgt_sr, device, is_half)
     vc = VC(tgt_sr, device, is_half)
     n_spk = cpt["config"][-3]
     return {"visible": False, "maximum": n_spk, "__type__": "update"}
@@ -332,7 +336,7 @@ def get_index():
     if check_for_name() != '':
         if iscolab:
             chosen_model=sorted(names)[0].split(".")[0]
-            logs_path="/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"+chosen_model
+            logs_path="/content/RVC/logs/"+chosen_model
             for file in os.listdir(logs_path):
                 if file.endswith(".index"):
                     return os.path.join(logs_path, file)
@@ -343,7 +347,7 @@ def get_index():
 def get_indexes():
     indexes_list=[]
     if iscolab:
-        for dirpath, dirnames, filenames in os.walk("/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"):
+        for dirpath, dirnames, filenames in os.walk("/content/RVC/logs/"):
             for filename in filenames:
                 if filename.endswith(".index"):
                     indexes_list.append(os.path.join(dirpath,filename))
@@ -379,7 +383,7 @@ def save_to_wav2(dropbox):
     
 def match_index(speaker):
     folder=speaker.split(".")[0]
-    parent_dir="/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"+folder
+    parent_dir="/content/RVC/logs/"+folder
     for filename in os.listdir(parent_dir):
         if filename.endswith(".index"):
             index_path=os.path.join(parent_dir,filename)
@@ -399,7 +403,13 @@ def download_from_url(url, model):
     zipfile_path = './zips/' + zipfile
     MODELEPOCH = ''
     if "drive.google.com" in url:
-        subprocess.run(["gdown", url, "--fuzzy", "-O", zipfile_path])
+        try:
+            subprocess.run(["gdown", url, "--fuzzy", "-O", zipfile_path])
+        except Exception as e:
+            try:
+                juuxn_utils.download_from_drive_url(url)
+            except:
+                return "Error al descargar"
     elif "mega.nz" in url:
         m = Mega()
         m.download_url(url, './zips')
@@ -528,15 +538,7 @@ with gr.Blocks(theme=gr.themes.Base()) as app:
             status_bar=gr.Textbox(label="")
             download_button.click(fn=download_from_url, inputs=[url, model], outputs=[status_bar])
     if iscolab:
-        try:
-            public_url = ngrok.connect(7860)
-            print('Click on THIS link: '+public_url)
-        except:
-            print('Failed to create ngrok URL')
-        try:
-            app.launch(share=True)
-        except KeyboardInterrupt:
-            ngrok.kill()
+        app.launch(share=True)
     else:
         app.queue(concurrency_count=511, max_size=1022).launch(
             server_name="0.0.0.0",
