@@ -8,8 +8,7 @@ import faiss
 from random import shuffle
 import scipy.io.wavfile as wavfile
 from mega import Mega
-import juuxn_utils
-
+from pyngrok import ngrok
 now_dir = os.getcwd()
 sys.path.append(now_dir)
 tmp = os.path.join(now_dir, "TEMP")
@@ -89,8 +88,6 @@ from config import (
     noparallel,
     noautoopen,
 )
-# Create an instance of the Config class
-
 from infer_uvr5 import _audio_pre_
 from my_utils import load_audio
 from train.process_ckpt import show_info, change_info, merge, extract_small_model
@@ -133,7 +130,7 @@ names = []
 for name in os.listdir(weight_root):
     if name.endswith(".pth"):
         names.append(name)
-        
+
 uvr5_names = []
 for name in os.listdir(weight_uvr5_root):
     if name.endswith(".pth"):
@@ -303,7 +300,6 @@ def get_vc(sid):
         net_g = net_g.half()
     else:
         net_g = net_g.float()
-    print(tgt_sr, device, is_half)
     vc = VC(tgt_sr, device, is_half)
     n_spk = cpt["config"][-3]
     return {"visible": False, "maximum": n_spk, "__type__": "update"}
@@ -331,41 +327,41 @@ def change_sr2(sr2, if_f0_3):
         return "pretrained/f0G%s.pth" % sr2, "pretrained/f0D%s.pth" % sr2
     else:
         return "pretrained/G%s.pth" % sr2, "pretrained/D%s.pth" % sr2
-        
+
 def get_index():
     if check_for_name() != '':
         if iscolab:
             chosen_model=sorted(names)[0].split(".")[0]
-            logs_path="/content/RVC/logs/"+chosen_model
+            logs_path="/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"+chosen_model
             for file in os.listdir(logs_path):
                 if file.endswith(".index"):
                     return os.path.join(logs_path, file)
             return ''
         else:
             return ''
-        
+
 def get_indexes():
     indexes_list=[]
     if iscolab:
-        for dirpath, dirnames, filenames in os.walk("/content/RVC/logs/"):
+        for dirpath, dirnames, filenames in os.walk("/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"):
             for filename in filenames:
                 if filename.endswith(".index"):
                     indexes_list.append(os.path.join(dirpath,filename))
         return indexes_list
     else:
         return ''
-        
+
 audio_files=[]
 for filename in os.listdir("./audios"):
     if filename.endswith(('.wav','.mp3')):
         audio_files.append(filename)
-        
+
 def get_name():
     if len(audio_files) > 0:
         return sorted(audio_files)[0]
     else:
         return ''
-        
+
 def save_to_wav(record_button):
     if record_button is None:
         pass
@@ -375,20 +371,20 @@ def save_to_wav(record_button):
         new_path='./audios/'+new_name
         shutil.move(path_to_file,new_path)
         return new_name
-    
+
 def save_to_wav2(dropbox):
     file_path=dropbox.name
     shutil.move(file_path,'./audios')
     return os.path.basename(file_path)
-    
+
 def match_index(speaker):
     folder=speaker.split(".")[0]
-    parent_dir="/content/RVC/logs/"+folder
+    parent_dir="/kaggle/working/Retrieval-based-Voice-Conversion-WebUI/logs/"+folder
     for filename in os.listdir(parent_dir):
         if filename.endswith(".index"):
             index_path=os.path.join(parent_dir,filename)
             return index_path
-            
+
 def download_from_url(url, model):
     url = url.strip()
     if url == '':
@@ -403,13 +399,7 @@ def download_from_url(url, model):
     zipfile_path = './zips/' + zipfile
     MODELEPOCH = ''
     if "drive.google.com" in url:
-        try:
-            subprocess.run(["gdown", url, "--fuzzy", "-O", zipfile_path])
-        except Exception as e:
-            try:
-                juuxn_utils.download_from_drive_url(url)
-            except:
-                return "Error al descargar"
+        subprocess.run(["gdown", url, "--fuzzy", "-O", zipfile_path])
     elif "mega.nz" in url:
         m = Mega()
         m.download_url(url, './zips')
@@ -497,7 +487,7 @@ with gr.Blocks(theme=gr.themes.Base()) as app:
                     interactive=True,
                     )
                 sid0.change(fn=match_index, inputs=[sid0], outputs=[file_index1])
-                
+
                 with gr.Row():
                     vc_output2 = gr.Audio(label="Output Audio (Click on the Three Dots in the Right Corner to Download)") 
                 with gr.Row():
@@ -538,7 +528,15 @@ with gr.Blocks(theme=gr.themes.Base()) as app:
             status_bar=gr.Textbox(label="")
             download_button.click(fn=download_from_url, inputs=[url, model], outputs=[status_bar])
     if iscolab:
-        app.launch(share=True)
+        try:
+            public_url = ngrok.connect(7860)
+            print('Click on THIS link: '+public_url)
+        except:
+            print('Failed to create ngrok URL')
+        try:
+            app.launch(share=True)
+        except KeyboardInterrupt:
+            ngrok.kill()
     else:
         app.queue(concurrency_count=511, max_size=1022).launch(
             server_name="0.0.0.0",
